@@ -1,6 +1,6 @@
 using System;
 
-namespace TodoList.Api
+namespace TodoList.Api.DomainObjects
 {
     public class TodoItem
     {

@@ -1,9 +1,11 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
-using System.Linq;
+using System.Collections.Generic;
 using System.Threading.Tasks;
+using TodoList.Api.DomainObjects;
+using TodoList.Api.Exceptions;
+using TodoList.Api.Services;
 
 namespace TodoList.Api.Controllers
 {
@@ -11,12 +13,12 @@ namespace TodoList.Api.Controllers
     [ApiController]
     public class TodoItemsController : ControllerBase
     {
-        private readonly TodoContext _context;
+        private readonly IToDoItemsService _toDoItemService;
         private readonly ILogger<TodoItemsController> _logger;
 
-        public TodoItemsController(TodoContext context, ILogger<TodoItemsController> logger)
+        public TodoItemsController(IToDoItemsService toDoItemService, ILogger<TodoItemsController> logger)
         {
-            _context = context;
+            _toDoItemService = toDoItemService;
             _logger = logger;
         }
 
@@ -24,7 +26,7 @@ namespace TodoList.Api.Controllers
         [HttpGet]
         public async Task<IActionResult> GetTodoItems()
         {
-            var results = await _context.TodoItems.Where(x => !x.IsCompleted).ToListAsync();
+            IEnumerable<TodoItem> results = await _toDoItemService.GetTodoItemsAsync();
             return Ok(results);
         }
 
@@ -32,7 +34,7 @@ namespace TodoList.Api.Controllers
         [HttpGet("{id}")]
         public async Task<IActionResult> GetTodoItem(Guid id)
         {
-            var result = await _context.TodoItems.FindAsync(id);
+            TodoItem result = await _toDoItemService.GetToDoItemAsync(id);
 
             if (result == null)
             {
@@ -42,31 +44,25 @@ namespace TodoList.Api.Controllers
             return Ok(result);
         }
 
-        // PUT: api/TodoItems/... 
+        /// <summary>
+        /// Updates a todo item.  This can be used to mark a to-do item as complete.
+        /// </summary>
+        // Put: api/TodoItems/...
         [HttpPut("{id}")]
         public async Task<IActionResult> PutTodoItem(Guid id, TodoItem todoItem)
         {
             if (id != todoItem.Id)
             {
-                return BadRequest();
+                return LogAndReturnBadRequest("Id in request does not match object.");
             }
-
-            _context.Entry(todoItem).State = EntityState.Modified;
 
             try
             {
-                await _context.SaveChangesAsync();
+                await _toDoItemService.UpdateToDoItemAsync(todoItem);
             }
-            catch (DbUpdateConcurrencyException)
+            catch (DoesNotExistException)
             {
-                if (!TodoItemIdExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
+                return NotFound();
             }
 
             return NoContent();
@@ -78,28 +74,22 @@ namespace TodoList.Api.Controllers
         {
             if (string.IsNullOrEmpty(todoItem?.Description))
             {
-                return BadRequest("Description is required");
+                return LogAndReturnBadRequest("Description is required.");
             }
-            else if (TodoItemDescriptionExists(todoItem.Description))
+            else if (await _toDoItemService.TodoItemDescriptionExistsAsync(todoItem.Description))
             {
-                return BadRequest("Description already exists");
-            } 
+                return LogAndReturnBadRequest("Description already exists.");
+            }
 
-            _context.TodoItems.Add(todoItem);
-            await _context.SaveChangesAsync();
+            await _toDoItemService.InsertToDoItemAsync(todoItem);
              
             return CreatedAtAction(nameof(GetTodoItem), new { id = todoItem.Id }, todoItem);
-        } 
-
-        private bool TodoItemIdExists(Guid id)
-        {
-            return _context.TodoItems.Any(x => x.Id == id);
         }
 
-        private bool TodoItemDescriptionExists(string description)
+        private IActionResult LogAndReturnBadRequest(string message)
         {
-            return _context.TodoItems
-                   .Any(x => x.Description.ToLowerInvariant() == description.ToLowerInvariant() && !x.IsCompleted);
+            _logger.LogError(message);
+            return BadRequest(message);
         }
     }
 }

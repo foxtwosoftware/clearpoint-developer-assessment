@@ -5,6 +5,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
+using TodoList.Api.DataAccess;
+using TodoList.Api.DomainObjects;
+using TodoList.Api.ExceptionFilters;
+using TodoList.Api.Services;
 
 namespace TodoList.Api
 {
@@ -31,13 +35,19 @@ namespace TodoList.Api
                       });
             });
 
-            services.AddControllers();
+            services.AddControllers(options =>
+            {
+                options.Filters.Add<ApiErrorExceptionFilter>();
+            });
+
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "TodoList.Api", Version = "v1" });
             });
 
             services.AddDbContext<TodoContext>(opt => opt.UseInMemoryDatabase("TodoItemsDB"));
+            services.AddTransient<IToDoItemsService, ToDoItemsService>();
+            services.AddTransient<IRepository<TodoItem>, TodoItemsRepository>();
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
